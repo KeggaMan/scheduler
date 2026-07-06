@@ -1,0 +1,45 @@
+name: Touch Supabase
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 12 * * 1"
+
+jobs:
+  touch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Touch Supabase with a harmless read
+        run: |
+          node <<'NODE'
+          const configUrl = "https://justchurch.net/scheduler/src/config.js?v=29";
+          const configText = await fetch(configUrl).then((response) => {
+            if (!response.ok) {
+              throw new Error(`Could not fetch scheduler config: HTTP ${response.status}`);
+            }
+            return response.text();
+          });
+
+          const supabaseUrl = configText.match(/url:\s*"([^"]+)"/)?.[1];
+          const anonKey = configText.match(/anonKey:\s*"([^"]+)"/)?.[1];
+
+          if (!supabaseUrl || !anonKey) {
+            throw new Error("Could not read Supabase URL or anon key from scheduler config.");
+          }
+
+          const touchUrl = `${supabaseUrl}/rest/v1/volunteers?select=id&limit=1`;
+          const response = await fetch(touchUrl, {
+            headers: {
+              apikey: anonKey,
+              Authorization: `Bearer ${anonKey}`,
+            },
+          });
+
+          const body = await response.text();
+          console.log(`Supabase touch status: HTTP ${response.status}`);
+          console.log(`Response: ${body.slice(0, 500)}`);
+
+          if (!response.ok) {
+            throw new Error("Supabase touch failed.");
+          }
+          NODE
