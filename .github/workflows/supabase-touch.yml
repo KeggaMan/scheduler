@@ -12,19 +12,37 @@ jobs:
       - name: Touch Supabase with a harmless read
         run: |
           node <<'NODE'
-          const configUrl = "https://justchurch.net/scheduler/src/config.js?v=29";
-          const configText = await fetch(configUrl).then((response) => {
-            if (!response.ok) {
-              throw new Error(`Could not fetch scheduler config: HTTP ${response.status}`);
-            }
-            return response.text();
-          });
+          const configUrl = new URL("https://justchurch.net/scheduler/src/config.js");
+          configUrl.searchParams.set("workflow", Date.now().toString());
 
-          const supabaseUrl = configText.match(/url:\s*"([^"]+)"/)?.[1];
-          const anonKey = configText.match(/anonKey:\s*"([^"]+)"/)?.[1];
+          const configResponse = await fetch(configUrl, {
+            cache: "no-store",
+            headers: {
+              Accept: "application/javascript",
+              "User-Agent": "justchurch-scheduler-supabase-touch/1.0",
+            },
+          });
+          const configText = await configResponse.text();
+
+          console.log(
+            `Scheduler config: HTTP ${configResponse.status}; ${configResponse.headers.get("content-type") || "unknown content type"}; ${configText.length} bytes`,
+          );
+
+          if (!configResponse.ok) {
+            throw new Error(`Could not fetch scheduler config: HTTP ${configResponse.status}`);
+          }
+
+          const supabaseUrl = configText.match(
+            /(?:^|[{,]\s*)["']?url["']?\s*:\s*["']([^"']+)["']/m,
+          )?.[1];
+          const anonKey = configText.match(
+            /(?:^|[{,]\s*)["']?anonKey["']?\s*:\s*["']([^"']+)["']/m,
+          )?.[1];
 
           if (!supabaseUrl || !anonKey) {
-            throw new Error("Could not read Supabase URL or anon key from scheduler config.");
+            throw new Error(
+              "Could not read Supabase URL or anon key from scheduler config.",
+            );
           }
 
           const touchUrl = `${supabaseUrl}/rest/v1/volunteers?select=id&limit=1`;
